@@ -11,16 +11,15 @@ use MIME::Base64;
 use Archive::Tar;
 
 $Getopt::Std::STANDARD_HELP_VERSION = 1;
-getopts('lhc:d:g:');
+getopts('lhcd:g:');
 
 my $pixel = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAAAXNSR0IArs4c6QAAAApJREFUCNdjYAAAAAIAAeIhvDMAAAAASUVORK5CYII=";
 
 my $config_file = $ENV{"HOME"}."/.blickr";
-my $tar = Archive::Tar->new;
 
 &read_config;
 my $ua = Flickr::Upload->new({'key' => $key, 'secret' => $secret });
-
+my $tar = Archive::Tar->new;
 
 if ($opt_l) {
 	# list DB
@@ -31,8 +30,12 @@ if ($opt_l) {
 		print "$counter:\tID:$key\tFile: $row->[0]\tDate: $row->[1]\n";
 		$counter++;
 	}
+
 } elsif ($opt_c) {
 	# change config
+
+	&new_config;
+
 } elsif ($opt_d) {
 	# delete image
 
@@ -47,10 +50,14 @@ if ($opt_l) {
 	} else {
 		print "Got an error :(\n".$res->{error_message}."\n";
 	}	
+
 } elsif ($opt_h) {
 	&HELP_MESSAGE;
+
 } elsif ($opt_g) {
 	# Get a picture
+
+	# Resolve ID
 	$id = (keys %{$cfg->param(-block=>'db')})[$opt_g-1];
 	$url = &get_url($id);
 
@@ -164,18 +171,7 @@ sub append($) {
 sub read_config () {
 	if (!-e $config_file) {
 		# No config? Ask me!
-		print "You have no config. So you need to answer some questions.\n";
-		print "Your API-Key?\n";
-		chomp($key = <STDIN>);
-		print "Your secret?\n";
-		chomp($secret = <STDIN>);
-
-		# Writing config into file
-		$cfg = new Config::Simple(syntax=>'ini');
-		$cfg->param('key', $key);
-		$cfg->param('secret', $secret);
-		$cfg->param(-block=>'db');
-		$cfg->write($config_file);
+		&new_config;
 	} else {
 		$cfg = new Config::Simple($config_file);
 		$key = $cfg->param('key');
@@ -187,6 +183,28 @@ sub read_config () {
 	}
 }
 
+# Read values need for config
+sub new_config() {
+	print "You need a new config. So I will ask you some questions.\n";
+	print "Your API-Key?\n";
+	chomp($key = <STDIN>);
+	print "Your secret?\n";
+	chomp($secret = <STDIN>);
+
+	# Read old config for not remove entries in [db]-section
+	if (-f $config_file) {
+		$cfg = new Config::Simple($config_file);
+		$cfg->delete('token');
+	} else {
+		$cfg = new Config::Simple(syntax=>'ini');
+	}
+
+	# Writing config into file
+	$cfg->param('key', $key);
+	$cfg->param('secret', $secret);
+	$cfg->param(-block=>'db');
+	$cfg->write($config_file);
+}
 
 sub get_url($) {
 	$id = shift;
