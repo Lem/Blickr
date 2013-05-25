@@ -15,7 +15,7 @@ What you need
   - `POSIX`
   - `MIME::Base64`
   - `Archive::Tar`
-- Binwalk in your $PATH
+- [Binwalk] in your $PATH
 - Flickr-Account and [API-Key] (Token will be created on runtime)
 
 How does it work?
@@ -39,3 +39,4 @@ ToDo
 * (Asyncron Upload with statusbar)
 
 [API-Key]: http://www.flickr.com/services/apps/create/apply/
+[Binwalk]: http://code.google.com/p/binwalk/
