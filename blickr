@@ -213,6 +213,7 @@ No option means: Upload file!
 -l	List your uploaded files
 -d	Delete one of your files online
 -c	Modive a config-value
+-g	Download file
 EOF
 
 	exit(0);
