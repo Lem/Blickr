@@ -152,23 +152,17 @@ sub append($) {
 	my $new = int(rand(9999))+90000 .".png";
 
 	# Write default 1x1 png 
-	open OUT, ">> $new" or die $!;
+	open OUT, "> tmp.png" or die $!;
 	print OUT decode_base64($pixel) or die $!;
-
+	close OUT;
 
 	$tar->add_files($file);
 	$tar->write('bla.tar');
 
-	open IN, "< bla.tar";
-	
-		local $/;
-	my $content = <IN>;
-	close IN;
+	# Much faster than handling via perl
+	`cat tmp.png bla.tar > $new`;
 
-	print OUT $content;
-	close OUT;
-
-	unlink('bla.tar');
+	unlink('bla.tar','tmp.png');
 
 	return $new;
 }
