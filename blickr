@@ -129,6 +129,8 @@ if ($opt_l) {
 
 
 	$up_file = &append($ARGV[0]); # Append file to $pixel
+	
+	&check_size($up_file);
 
 	# Finaly! Upload!
 	$id = $ua->upload(
@@ -139,7 +141,7 @@ if ($opt_l) {
 		'is_family' => 0
 	) or die "Failed to upload $ARGV[0]";
 
-	unlink('bla.tar', $up_file);
+	unlink($up_file);
 
 	$cfg->param("db.$id", [basename($ARGV[0]), strftime "%m_%d_%Y_-_%H_%M_%S", localtime ]);
 	$cfg->write($config_file);
@@ -158,14 +160,40 @@ sub append($) {
 	$tar->write('bla.tar');
 
 	open IN, "< bla.tar";
-	local $/;
+	
+		local $/;
 	my $content = <IN>;
 	close IN;
 
 	print OUT $content;
 	close OUT;
 
+	unlink('bla.tar');
+
 	return $new;
+}
+
+sub check_size($) {
+	my $file = shift;
+
+        # File to large. Flickr allows 200MB/photo
+        if ((-s $file) >= 209715200) {
+                print "Sorry, Flickr allows only 200MB\n";
+                unlink($file);
+                exit(1);
+        }
+
+	# Filesize greater than 150MB?
+	if ((-s $file) >= 157286400) {
+		print "What a big file! Upload could result in a laggy system. Continue? [y/n]\n";
+		chomp($input = <STDIN>);
+		if ($input =~ /^[y]$/i) {
+			return;
+		} else {
+			unlink($file);
+			exit;
+		}
+	}
 }
 
 sub read_config () {
