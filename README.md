@@ -22,6 +22,10 @@ Examples
 - `blickr -g 5` downloads and extract your uploaded file with position 5 in DB.
 - `blickr -l` lists your DB
 
+Note
+----
+This is my very first tool written in ruby. Please keep this in mind while using.
+
 ToDo
 ----
 * GPG-Support
