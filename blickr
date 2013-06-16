@@ -1,260 +1,168 @@
-#!/usr/bin/perl
-use Flickr::API2;
-use Flickr::Upload;
-use Config::Simple;
-use Data::Dumper;
-use Getopt::Std;
-use LWP::Simple;
-use File::Basename;
-use POSIX qw(strftime);
-use MIME::Base64;
-use Archive::Tar;
+#!/usr/bin/env ruby
+$LOAD_PATH << './flickraw_mod/lib'
+require 'pp'
+require 'flickraw'
+require 'net/http'
+require 'yaml'
+require 'optparse'
+require 'base64'
+require 'archive/tar/minitar'
+include Archive::Tar
 
-$Getopt::Std::STANDARD_HELP_VERSION = 1;
-getopts('lhcd:g:');
+$config_file = ENV['HOME'] + "/.blickr"
+$smallgif = "R0lGODlhAQABAIABAP///wAAACwAAAAAAQABAAACAkQBADs="
 
-my $pixel = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAAAXNSR0IArs4c6QAAAApJREFUCNdjYAAAAAIAAeIhvDMAAAAASUVORK5CYII=";
+# Parse options
+def parse_opt(arg)
+	options = {}
 
-my $config_file = $ENV{"HOME"}."/.blickr";
+	parser = OptionParser.new do |opts| 
+		opts.on('-h', '--help', "Da help") do 
+			options['help'] = true
+		end
 
-&read_config;
-my $ua = Flickr::Upload->new({'key' => $key, 'secret' => $secret });
-my $tar = Archive::Tar->new;
+		opts.on('-l', '--list', "List local DB") do 
+			options['list'] = true
+		end
 
-if ($opt_l) {
-	# list DB
+		opts.on('-g ID', '--get ID', Integer, "Download ID") do |id|
+			options['get'] = id
+		end
 
-	$counter = 1;
-	foreach $key ( keys %{$cfg->param(-block=>'db')} ){
-		$row = $cfg->param(-block=>'db')->{$key};
-		print "$counter:\tID:$key\tFile: $row->[0]\tDate: $row->[1]\n";
-		$counter++;
-	}
+		opts.on('-d ID', '--delete ID', Integer, "Delete ID on Flickr") do |id|
+			options['del'] = id
+		end
 
-} elsif ($opt_c) {
-	# change config
+		opts.on('-m', '--meassure', "Test Uploadspeet for difference in time") do 
+			options['meassure'] = true
+		end
+	end
 
-	&new_config;
+	begin
+		parser.parse!(arg)
+	rescue OptionParser::InvalidOption
+		puts "Woot? I don't know that option..."
+		exit
+	end
+	options
+end
 
-} elsif ($opt_d) {
-	# delete image
+# Parse initfile
+def parse_init
+	if File.exist? $config_file
+		if File.readable? $config_file
+			ini = begin
+				YAML.load(File.open($config_file))
+			rescue ArgumentError => e
+				puts "Could not parse config: #{e.message}"
+			end
+			return ini
+		else
+			puts "Can not read file"
+		end
+	else
+		return get_access
+	end
+end
 
-	# To match list-ID and element we need to substract one
-	$id = (keys %{$cfg->param(-block=>'db')})[$opt_d-1];
-	$res = $ua->execute_method("flickr.photos.delete", { auth_token => $token, photo_id => $id });
+# Get access with oauth and write config
+def get_access
+	puts "You have no config. Please answer some questions."
+	puts "What is your API-Key?"
+	FlickRaw.api_key = gets.strip
+	puts "What is the secret?"
+	FlickRaw.shared_secret = gets.strip
+
+	token = flickr.get_request_token
+	auth_url = flickr.get_authorize_url(token['oauth_token'], :perms => 'delete')
+
+	puts "Visit #{auth_url} and enter the result:"
+	result = gets.strip
+
+	begin
+		flickr.get_access_token(token['oauth_token'], token['oauth_token_secret'], result)
+		login = flickr.test.login
+		puts "You are now authenticated as #{login.username} with token #{flickr.access_token} and secret #{flickr.access_secret}"
+	rescue FlickRaw::FailedResponse => e
+		puts "Authentication failed : #{e.msg}"
+	end
+
+	# Write to config 
+	ini = {'flickr' => { 'api_key' => FlickRaw.api_key, 'shared_secret' => FlickRaw.shared_secret, 'access_token' => flickr.access_token, 'access_secret' => flickr.access_secret } }
 	
-	if ($res->{error_message} == '') {
-		print "Photo with ID $id removed\n";
-		$cfg->delete("db.$id");
-		$cfg->write($config_file);
-	} else {
-		print "Got an error :(\n".$res->{error_message}."\n";
-	}	
+	File.open($config_file, "w") {|f| f.write(ini.to_yaml) }
 
-} elsif ($opt_h) {
-	&HELP_MESSAGE;
+	return ini	
+end
 
-} elsif ($opt_g) {
-	# Get a picture
+ini = parse_init
+#FlickRaw.api_key, FlickRaw.shared_secret, flickr.access_token, flickr.access_secret
+opt = parse_opt(ARGV)
 
-	# Resolve ID
-	$id = (keys %{$cfg->param(-block=>'db')})[$opt_g-1];
-	$url = &get_url($id);
+FlickRaw.api_key = ini['flickr']['api_key']
+FlickRaw.shared_secret = ini['flickr']['shared_secret']
+flickr.access_token = ini['flickr']['access_token']
+flickr.access_secret = ini['flickr']['access_secret']
 
-	# Download File
-	getstore($url, 'dummy.data');
 
-	$binwalk = `binwalk dummy.data`;
+if opt['help']
+	puts "Todo help"
+elsif opt['list']
+	if ini.has_key?"db" 
+		section = ini['db']
 
-	# We need the decimal offset of out file
-	if ($binwalk =~ /.*\n(\d+)\s*0x[a-f0-9]+.*tar.*\n/i) {
-		$offset = $1;
-	} else {
-		die "No tar!\n";
-	}
+		counter = 0
+		section.to_a.each do |e|
+			puts "#{counter}:\t#{e[0]}\t#{e[1]}"
+			counter += 1
+		end
+	else
+		puts "No entry"
+	end
+elsif opt['del']
+	flickr.photos.delete(:photo_id => ini['db'].to_a[opt['del']][0] )
+	ini['db'].delete(ini['db'].to_a[opt['del']][0])
+	File.open($config_file, "w") {|f| f.write(ini.to_yaml) }
+elsif opt['get']
+	file_o = FlickRaw.url_o( flickr.photos.getInfo(:photo_id => ini['db'].to_a[opt['get']][0]) )
 
-	# Read file from offset
-	open IN, "< dummy.data";
-	seek(IN, $offset, 0);
-	local $/;
-	my $content = <IN>;
-	close IN;
+	open("dummy.data", "wb") { |f| f.write(Net::HTTP.get_response(URI.parse(file_o)).body) }
 
-	# Write our restored archive
-	open OUT, "> dummy.tar";
-	print OUT $content;
-	close OUT;
+	offset = %x( binwalk dummy.data ).match(/^(\d+)\s+0x\d+\s+.*tar.*$/)[1]
 
-	# Extract our real file :D
-	$tar->read('dummy.tar');
-	$tar->extract();
+	%x( dd if=dummy.data of=dummy.tar bs=1 skip=#{offset} &> /dev/null )
 
-	# Remove unnecessary files
-	unlink('dummy.data', 'dummy.tar');
+	Minitar.unpack('dummy.tar', '.')
+
+	File.unlink('dummy.tar')
+	File.unlink('dummy.data')
+elsif opt['meassure']
+	puts "Not implemented yet"
+else
+	up_file = ARGV[0]
+	exit if up_file.nil?
+
+	File.open('small.gif', 'wb') {  |f| f.write(Base64.decode64($smallgif)) }
+
+	# Is a file?
+	if File.file?(up_file)
+		File.open('dummy.tar', 'wb') { |tar| Minitar.pack(up_file, tar) }
+		%x( cat small.gif dummy.tar > blickr.gif )
+		
+		id = flickr.upload_photo 'blickr.gif'
 	
-} else {
-	
-	# Do we have ARGV?
-	if (!$ARGV[0]) {
-		print "Please give me a file :(\n";
-		exit(1);
-	}
+		# Save information about file
+		if ini['db'].is_a?(Hash)
+			ini['db'].store( id.to_s, up_file + ";" + Time.now.to_i.to_s )
+		else
+			ini['db'] = { id.to_s => up_file + ";" + Time.now.to_i.to_s}
+		end
 
-	# Is file a file?
-	if (!-f $ARGV[0]) {
-		print "That's not a file :(!\n";
-		exit(1);
-	}
-
-	# If no auth_token generate one.
-	if (!$token) {
-
-		$frobres = $ua->execute_method("flickr.auth.getFrob");
-		do { print "Can't get Frob: \n".Dumper($frobres); exit(1); }  if not defined $frobres->{success}; 
-		$frob = $frobres->{tree}->{children}->[1]->{children}->[0]->{content};
-
-		print "Please use following URL to generate a token:\n";
-		print $ua->request_auth_url('delete', $frob)."\n";
-		print "After authorizing, press enter";
-		<STDIN>;
-
-		$tokenres = $ua->execute_method("flickr.auth.getToken",{ 'frob' => $frob , 'perms' => 'delete'} );
-		do { print "Got problem while request token :\n".Dumper($tokenres); exit(1); }if not defined $tokenres and $tokenres->{success};
-		$token = $tokenres->{tree}->{children}->[1]->{children}->[1]->{children}->[0]->{content}; 
-
-		# Save token :D
-		$cfg->param('token', $token);
-		$cfg->write($config_file);
-	}
-
-
-	$up_file = &append($ARGV[0]); # Append file to $pixel
-	
-	&check_size($up_file);
-
-	# Finaly! Upload!
-	$id = $ua->upload(
-		'photo' => $up_file,
-		'auth_token' => $token,
-		'is_public' => 1,
-		'is_friend' => 0,
-		'is_family' => 0
-	) or die "Failed to upload $ARGV[0]";
-
-	unlink($up_file);
-
-	$cfg->param("db.$id", [basename($ARGV[0]), strftime "%m_%d_%Y_-_%H_%M_%S", localtime ]);
-	$cfg->write($config_file);
-}
-
-sub append($) {
-	my $file = shift;
-	my $new = int(rand(9999))+90000 .".png";
-
-	# Write default 1x1 png 
-	open OUT, "> tmp.png" or die $!;
-	print OUT decode_base64($pixel) or die $!;
-	close OUT;
-
-	$tar->add_files($file);
-	$tar->write('bla.tar');
-
-	# Much faster than handling via perl
-	`cat tmp.png bla.tar > $new`;
-
-	unlink('bla.tar','tmp.png');
-
-	return $new;
-}
-
-sub check_size($) {
-	my $file = shift;
-
-        # File to large. Flickr allows 200MB/photo
-        if ((-s $file) >= 209715200) {
-                print "Sorry, Flickr allows only 200MB\n";
-                unlink($file);
-                exit(1);
-        }
-
-	# Filesize greater than 150MB?
-	if ((-s $file) >= 157286400) {
-		print "What a big file! Upload could result in a laggy system. Continue? [y/n]\n";
-		chomp($input = <STDIN>);
-		if ($input =~ /^[y]$/i) {
-			return;
-		} else {
-			unlink($file);
-			exit;
-		}
-	}
-}
-
-sub read_config () {
-	if (!-e $config_file) {
-		# No config? Ask me!
-		&new_config;
-	} else {
-		$cfg = new Config::Simple($config_file);
-		$key = $cfg->param('key');
-		$secret = $cfg->param('secret');
-
-		if ($cfg->param('token')) {
-			$token = $cfg->param('token');
-		}
-	}
-}
-
-# Read values need for config
-sub new_config() {
-	print "You need a new config. So I will ask you some questions.\n";
-	print "Your API-Key?\n";
-	chomp($key = <STDIN>);
-	print "Your secret?\n";
-	chomp($secret = <STDIN>);
-
-	# Read old config for not remove entries in [db]-section
-	if (-f $config_file) {
-		$cfg = new Config::Simple($config_file);
-		$cfg->delete('token');
-	} else {
-		$cfg = new Config::Simple(syntax=>'ini');
-	}
-
-	# Writing config into file
-	$cfg->param('key', $key);
-	$cfg->param('secret', $secret);
-	$cfg->param(-block=>'db');
-	$cfg->write($config_file);
-}
-
-sub get_url($) {
-	$id = shift;
-
-	# Get infos
-	$res = $ua->execute_method("flickr.photos.getInfo", { auth_token => $token, photo_id => $id });
-	
-	# Extract needed values
-	$server = $res->{tree}->{children}->[1]->{attributes}->{server};
-	$farm = $res->{tree}->{children}->[1]->{attributes}->{farm};
-	$secret = $res->{tree}->{children}->[1]->{attributes}->{originalsecret};
-	$ext = $res->{tree}->{children}->[1]->{attributes}->{originalformat};
-	
-	# Return original-URL
-	return "http://farm$farm.staticflickr.com/$server/$id\_$secret\_o.$ext";
-}
-
-sub HELP_MESSAGE() {
-	print <<EOF;
-Blickr - Backup files to Flickr.
-
-No option means: Upload file!
-
--l	List your uploaded files
--d	Delete one of your files online
--c	Modive a config-value
--g	Download file
-EOF
-
-	exit(0);
-}
+		File.open($config_file, "w") {|f| f.write(ini.to_yaml) }
+		File.unlink('small.gif')
+		File.unlink('dummy.tar')
+		File.unlink('blickr.gif')
+	else 
+		puts "Not a file, sorry :("
+	end
+end
