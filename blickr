@@ -149,6 +149,12 @@ else
 		File.open('dummy.tar', 'wb') { |tar| Minitar.pack(up_file, tar) }
 		%x( cat small.gif dummy.tar > blickr.gif )
 		
+		# Flickr allows 200MB per image
+		if File.size?('blickr.gif') > 209715200
+			puts "Your file is lager than the 200MB which Flickr allows per image! Aborting."
+			exit
+		end
+
 		id = flickr.upload_photo 'blickr.gif'
 	
 		# Save information about file
