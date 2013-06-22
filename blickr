@@ -6,6 +6,7 @@ require 'net/http'
 require 'yaml'
 require 'optparse'
 require 'base64'
+require 'gpgme'
 require 'archive/tar/minitar'
 include Archive::Tar
 
@@ -35,6 +36,10 @@ def parse_opt(arg)
 
 		opts.on('-m', '--meassure', "Test Uploadspeet for difference in time") do 
 			options['meassure'] = true
+		end
+
+		opts.on('-e', '--encrypt', "I want to encrypt!!1")  do |recipient|
+			options['gpg'] = true
 		end
 	end
 
@@ -95,6 +100,35 @@ def get_access
 	return ini	
 end
 
+def check_recipient(ini)
+	recipient = ini['flickr']['gpg']
+	
+	if recipient.nil?
+		puts "No privaty key defined. Please enter your matching email:"
+		input = STDIN.gets.strip
+		ini['flickr'].store( 'gpg', input )
+		recipient = input
+
+		File.open($config_file, "w") {|f| f.write(ini.to_yaml) }
+	end
+
+	keys = GPGME::Key.find(:secret, recipient )
+
+	keys.each do |key|
+		# Key expired?
+	        if key.expired
+			puts "Your key seems to be expired. Aborting"
+			exit
+		end
+	end
+
+	# There is no private key?
+	if keys.length == 0
+		puts "Oh my. Recipient should be you. Or don't you want to decrypt your files?"
+		exit
+	end
+end
+
 ini = parse_init
 #FlickRaw.api_key, FlickRaw.shared_secret, flickr.access_token, flickr.access_secret
 opt = parse_opt(ARGV)
@@ -103,7 +137,6 @@ FlickRaw.api_key = ini['flickr']['api_key']
 FlickRaw.shared_secret = ini['flickr']['shared_secret']
 flickr.access_token = ini['flickr']['access_token']
 flickr.access_secret = ini['flickr']['access_secret']
-
 
 if opt['help']
 	puts "Todo help"
@@ -124,7 +157,10 @@ elsif opt['del']
 	ini['db'].delete(ini['db'].to_a[opt['del']][0])
 	File.open($config_file, "w") {|f| f.write(ini.to_yaml) }
 elsif opt['get']
-	file_o = FlickRaw.url_o( flickr.photos.getInfo(:photo_id => ini['db'].to_a[opt['get']][0]) )
+	id = ini['db'].to_a[opt['get']][0]
+	name, time, gpg = ini['db'].to_a[opt['get']][1].split(';')
+
+	file_o = FlickRaw.url_o( flickr.photos.getInfo(:photo_id => id) )
 
 	open("dummy.data", "wb") { |f| f.write(Net::HTTP.get_response(URI.parse(file_o)).body) }
 
@@ -134,7 +170,18 @@ elsif opt['get']
 
 	Minitar.unpack('dummy.tar', '.')
 
+	# Decrypt if gpg is set
+	if gpg.eql?'1'
+		begin
+		crypto = GPGME::Crypto.new
+		crypto.decrypt File.open('dummy.gpg', 'r'), :output => File.open(name, "w+")
+		rescue GPGME::Error::DecryptFailed
+			puts "Opss. It seems that I can not find a matching private key"
+		end
+	end
+
 	File.unlink('dummy.tar')
+	File.unlink('dummy.gpg')
 	File.unlink('dummy.data')
 elsif opt['meassure']
 	puts "Not implemented yet"
@@ -142,31 +189,50 @@ else
 	up_file = ARGV[0]
 	exit if up_file.nil?
 
-	File.open('small.gif', 'wb') {  |f| f.write(Base64.decode64($smallgif)) }
+	File.open('small.gif', 'wb') {	|f| f.write(Base64.decode64($smallgif)) }
 
 	# Is a file?
 	if File.file?(up_file)
-		File.open('dummy.tar', 'wb') { |tar| Minitar.pack(up_file, tar) }
+		if opt['gpg']
+			check_recipient(ini)
+			
+			puts "Encrypt file..."
+			GPGME::Crypto.new.encrypt File.open(up_file), :recipients => ini['flickr']['gpg'], :output => File.open('dummy.gpg', "w")
+			puts "Packing..."
+			File.open('dummy.tar', 'wb') { |tar| Minitar.pack('dummy.gpg', tar) }
+			is_gpg = '1'
+		else
+			puts "Packing..."
+			File.open('dummy.tar', 'wb') { |tar| Minitar.pack(up_file, tar) }
+			is_gpg = '0'
+		end
+
+		puts "Append tar to gif..."
 		%x( cat small.gif dummy.tar > blickr.gif )
-		
+
 		# Flickr allows 200MB per image
 		if File.size?('blickr.gif') > 209715200
 			puts "Your file is lager than the 200MB which Flickr allows per image! Aborting."
 			exit
 		end
 
+		puts "Starting upload. Please wait!"
 		id = flickr.upload_photo 'blickr.gif'
 	
+		# Get filename
+		basename = File.basename up_file
+		
 		# Save information about file
 		if ini['db'].is_a?(Hash)
-			ini['db'].store( id.to_s, up_file + ";" + Time.now.to_i.to_s )
+			ini['db'].store( id.to_s, basename + ";" + Time.now.to_i.to_s + ";" + is_gpg )
 		else
-			ini['db'] = { id.to_s => up_file + ";" + Time.now.to_i.to_s}
+			ini['db'] = { id.to_s => basename + ";" + Time.now.to_i.to_s + ";" + is_gpg }
 		end
 
 		File.open($config_file, "w") {|f| f.write(ini.to_yaml) }
 		File.unlink('small.gif')
 		File.unlink('dummy.tar')
+		File.unlink('dummy.gpg')
 		File.unlink('blickr.gif')
 	else 
 		puts "Not a file, sorry :("
