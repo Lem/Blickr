@@ -21,6 +21,8 @@ Examples
 - `blickr -d 3` deletes Photo on position 3 in your localy stored DB.
 - `blickr -g 5` downloads and extract your uploaded file with position 5 in DB.
 - `blickr -l` lists your DB
+- `blickr -e FILE` encrypt FILE && upload it
+- `blickr FILE` upload FILE wihtout encryption
 
 Note
 ----
@@ -28,7 +30,6 @@ This is my very first tool written in ruby. Please keep this in mind while using
 
 ToDo
 ----
-* GPG-Support
 * Randomly choosen picture
 * Multiple files
 * (Asyncron Upload with statusbar)
