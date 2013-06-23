@@ -144,9 +144,18 @@ elsif opt['list']
 	if ini.has_key?"db" 
 		section = ini['db']
 
+		# Counter is used as internal ID.
+		# Get and Remove will work with ID
 		counter = 0
+
 		section.to_a.each do |e|
-			puts "#{counter}:\t#{e[0]}\t#{e[1]}"
+			
+			fid = e[0] # Not needed at this point
+			file, time, gpg = e[1].split(';')
+			gpg2 = gpg.match('1') ? ':D' : ':('
+
+			# Output
+			puts "#{counter}:\t#{file}\t#{Time.at(time.to_i)}\tGPG #{gpg2}"
 			counter += 1
 		end
 	else
