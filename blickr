@@ -178,10 +178,11 @@ elsif opt['get']
 		rescue GPGME::Error::DecryptFailed
 			puts "Opss. It seems that I can not find a matching private key"
 		end
+
+		File.unlink('dummy.gpg')
 	end
 
 	File.unlink('dummy.tar')
-	File.unlink('dummy.gpg')
 	File.unlink('dummy.data')
 elsif opt['meassure']
 	puts "Not implemented yet"
@@ -232,8 +233,9 @@ else
 		File.open($config_file, "w") {|f| f.write(ini.to_yaml) }
 		File.unlink('small.gif')
 		File.unlink('dummy.tar')
-		File.unlink('dummy.gpg')
 		File.unlink('blickr.gif')
+
+		File.unlink('dummy.gpg') if File.exists?'dummy.gpg'
 	else 
 		puts "Not a file, sorry :("
 	end
