@@ -28,12 +28,16 @@ Note
 ----
 This is my very first tool written in ruby. Please keep this in mind while using.
 
+I will add video as soon as downloading your own original video is supported. [It seems that some cool flickr-devs currently working on it].
+
 ToDo
 ----
 * Randomly choosen picture
 * Multiple files
+* (Video up/download (1GB per file))
 * (Asyncron Upload with statusbar)
 
 [API-Key]: http://www.flickr.com/services/apps/create/apply/
 [Binwalk]: http://code.google.com/p/binwalk/
 [modified version]: https://github.com/Lem/flickraw
+[It seems that some cool flickr-devs currently working on it]: http://www.flickr.com/help/forum/en-us/72157633536541721/72157634253091789/
