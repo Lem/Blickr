@@ -7,7 +7,7 @@ What you need
 - Some Gems
   - `gpgme`
   - `archive-tar-minitar`
-  - `flickraw` ([modified version] provided in subdir since my pull-request is not accepted yet)
+  - `flickraw` 
 - *[Binwalk]* and *dd* in your $PATH
 - Flickr-Account and [API-Key] (Token will be created on runtime)
 

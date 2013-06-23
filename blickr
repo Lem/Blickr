@@ -1,5 +1,4 @@
 #!/usr/bin/env ruby
-$LOAD_PATH << './flickraw_mod/lib'
 require 'pp'
 require 'flickraw'
 require 'net/http'
