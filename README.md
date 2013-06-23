@@ -5,6 +5,7 @@ What you need
 -------------
 
 - Some Gems
+  - `gpgme`
   - `archive-tar-minitar`
   - `flickraw` ([modified version] provided in subdir since my pull-request is not accepted yet)
 - *[Binwalk]* and *dd* in your $PATH
