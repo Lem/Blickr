@@ -19,11 +19,10 @@ All IDs of uploaded files will be stored localy.
 Examples
 --------
 - `blickr /etc/passwd` will upload */etc/passwd* as a picture to Flickr
+- `blickr -e FILE` encrypt FILE && upload it
 - `blickr -d 3` deletes Photo on position 3 in your localy stored DB.
 - `blickr -g 5` downloads and extract your uploaded file with position 5 in DB.
 - `blickr -l` lists your DB
-- `blickr -e FILE` encrypt FILE && upload it
-- `blickr FILE` upload FILE wihtout encryption
 
 Note
 ----

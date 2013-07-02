@@ -33,10 +33,6 @@ def parse_opt(arg)
 			options['del'] = id
 		end
 
-		opts.on('-m', '--meassure', "Test Uploadspeet for difference in time") do 
-			options['meassure'] = true
-		end
-
 		opts.on('-e', '--encrypt', "I want to encrypt!!1")  do |recipient|
 			options['gpg'] = true
 		end
@@ -192,8 +188,6 @@ elsif opt['get']
 
 	File.unlink('dummy.tar')
 	File.unlink('dummy.data')
-elsif opt['meassure']
-	puts "Not implemented yet"
 else
 	up_file = ARGV[0]
 	exit if up_file.nil?
