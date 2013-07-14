@@ -111,7 +111,7 @@ def check_recipient(ini)
 
 	keys.each do |key|
 		# Key expired?
-	        if key.expired
+		if key.expired
 			puts "Your key seems to be expired. Aborting"
 			exit
 		end
@@ -122,6 +122,65 @@ def check_recipient(ini)
 		puts "Oh my. Recipient should be you. Or don't you want to decrypt your files?"
 		exit
 	end
+end
+
+# Size = 199MB
+def split input, size = 208666624
+	File.open(input,"r") do |fh_in|
+		until fh_in.eof? 
+			File.open("#{input}.#{"%05d"%(fh_in.pos/size)}","w") do |fh_out|
+				fh_out << fh_in.read(size)
+			end
+		end
+	end
+
+	# Return splittet files
+	return Dir.glob("#{input}.*")
+end
+
+def upload up_file, ini, opt
+	# Want to encrypt?
+	if opt['gpg']
+		check_recipient(ini)
+
+		puts "Encrypt #{up_file}..."
+		GPGME::Crypto.new.encrypt File.open(up_file), :recipients => ini['flickr']['gpg'], :output => File.open('dummy.gpg', "w")
+		puts "Packing #{up_file}..."
+		File.open('dummy.tar', 'wb') { |tar| Minitar.pack('dummy.gpg', tar) }
+		is_gpg = '1'
+	else
+		puts "Packing #{up_file}..."
+		File.open('dummy.tar', 'wb') { |tar| Minitar.pack(up_file, tar) }
+		is_gpg = '0'
+	end
+
+	puts "Append tar to gif..."
+	%x( cat small.gif dummy.tar > blickr.gif )
+
+	# Flickr allows 200MB per image
+	if File.size?('blickr.gif') > 209715200
+		puts "Your file is lager than the 200MB which Flickr allows per image! Aborting."
+		exit
+	end
+
+	puts "Starting upload. Please wait!"
+	id = flickr.upload_photo 'blickr.gif'
+
+	# Get filename
+	basename = File.basename up_file
+
+	# Save information about file
+	if ini['db'].is_a?(Hash)
+		ini['db'].store( id.to_s, basename + ";" + Time.now.to_i.to_s + ";" + is_gpg )
+	else
+		ini['db'] = { id.to_s => basename + ";" + Time.now.to_i.to_s + ";" + is_gpg }
+	end
+
+	File.open($config_file, "w") {|f| f.write(ini.to_yaml) }
+	File.unlink('dummy.tar')
+	File.unlink('blickr.gif')
+
+	File.unlink('dummy.gpg') if File.exists?'dummy.gpg'
 end
 
 ini = parse_init
@@ -189,56 +248,40 @@ elsif opt['get']
 	File.unlink('dummy.tar')
 	File.unlink('dummy.data')
 else
-	up_file = ARGV[0]
-	exit if up_file.nil?
+	# Exit if no file to upload
+	exit if ARGV.nil?
 
+	# will be removed later
 	File.open('small.gif', 'wb') {	|f| f.write(Base64.decode64($smallgif)) }
 
-	# Is a file?
-	if File.file?(up_file)
-		if opt['gpg']
-			check_recipient(ini)
-			
-			puts "Encrypt file..."
-			GPGME::Crypto.new.encrypt File.open(up_file), :recipients => ini['flickr']['gpg'], :output => File.open('dummy.gpg', "w")
-			puts "Packing..."
-			File.open('dummy.tar', 'wb') { |tar| Minitar.pack('dummy.gpg', tar) }
-			is_gpg = '1'
-		else
-			puts "Packing..."
-			File.open('dummy.tar', 'wb') { |tar| Minitar.pack(up_file, tar) }
-			is_gpg = '0'
-		end
+	ARGV.each { |arg|
+		# Find all matching files
+		files = Dir.glob(arg)
 
-		puts "Append tar to gif..."
-		%x( cat small.gif dummy.tar > blickr.gif )
-
-		# Flickr allows 200MB per image
-		if File.size?('blickr.gif') > 209715200
-			puts "Your file is lager than the 200MB which Flickr allows per image! Aborting."
-			exit
-		end
-
-		puts "Starting upload. Please wait!"
-		id = flickr.upload_photo 'blickr.gif'
+		# Do stuff on every matched file
+		files.each { |f|
+			# Is a file?
+			if File.file?(f)
+				# File bigger than 199MB? Make sure we are not going over 200 MB by splitting
+				if File.size?(f) > 208666624
+					puts "Splitting #{f}..."
 	
-		# Get filename
-		basename = File.basename up_file
-		
-		# Save information about file
-		if ini['db'].is_a?(Hash)
-			ini['db'].store( id.to_s, basename + ";" + Time.now.to_i.to_s + ";" + is_gpg )
-		else
-			ini['db'] = { id.to_s => basename + ";" + Time.now.to_i.to_s + ";" + is_gpg }
-		end
+					split(f).each {|p|
+						# Upload part of splitted file
+						upload p, ini, opt
+						# Remove uploaded parts
+						File.unlink(p)
+					}
+				else
+					# Small enough, upload
+					upload f, ini, opt
+				end
+			else
+                		puts "#{f} is not a file, sorry :("
+        		end
+		}
+	}
 
-		File.open($config_file, "w") {|f| f.write(ini.to_yaml) }
-		File.unlink('small.gif')
-		File.unlink('dummy.tar')
-		File.unlink('blickr.gif')
-
-		File.unlink('dummy.gpg') if File.exists?'dummy.gpg'
-	else 
-		puts "Not a file, sorry :("
-	end
+	# can now be removed
+	File.unlink('small.gif')
 end
